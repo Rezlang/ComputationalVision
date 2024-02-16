@@ -205,21 +205,21 @@ def homographyInliers(numInliers, percentageInliers):
 def createMosaic(img1, img2, homography):
     horizontalBuffer = img2.shape[0] // 2
     verticalBuffer = img2.shape[1] // 2
-    img2_large_canvas = cv2.copyMakeBorder(
+    img2 = cv2.copyMakeBorder(
         img2, horizontalBuffer, horizontalBuffer, verticalBuffer, verticalBuffer, cv2.BORDER_CONSTANT, value=255)
 
     translation = np.array([[1, 0, verticalBuffer],
                             [0, 1, horizontalBuffer],
                             [0, 0, 1]])
 
-    homography_corrected = np.dot(translation, homography)
+    homography = np.dot(translation, homography)
 
     warpedImg1 = cv2.warpPerspective(
-        img1, homography_corrected, (img2_large_canvas.shape[1], img2_large_canvas.shape[0]))
+        img1, homography, (img2.shape[1], img2.shape[0]))
 
     alpha = .5
     mosaic = cv2.addWeighted(
-        warpedImg1, alpha, img2_large_canvas, 1 - alpha, 0)
+        warpedImg1, alpha, img2, 1 - alpha, 0)
 
     # Display
     cv2.imshow('Mosaic Image', mosaic)
@@ -239,7 +239,7 @@ if __name__ == "__main__":
     stats = np.full((len(images), len(images), 3), [-1, -1, -1])
     for i, img1 in enumerate(images):
         for j, img2 in enumerate(images):
-            if (img1 == img2).all():
+            if (j <= i):
                 continue
             keypoints1, descriptors1 = extractKeyPoints(img1)
             keypoints2, descriptors2 = extractKeyPoints(img2)
