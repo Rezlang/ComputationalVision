@@ -75,10 +75,14 @@ def matchKeyPoints(img1, keypoints1, descriptors1, img2, keypoints2, descriptors
         img1, keypoints1, img2, keypoints2, goodMatches, None)
     cv2.imshow('drawnMatches', outImage)
     cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
     # Decide whether the images depict the same scene, threshholding can be moved
-    sameScene = len(goodMatches) > 75 and len(
-        goodMatches) / len(keypoints1) > 0.1 and len(goodMatches) / len(keypoints2) > 0.1
+    percent1 = len(goodMatches) / len(keypoints1)
+    percent2 = len(goodMatches) / len(keypoints2)
+    sameScene = len(goodMatches) > 50 and percent1 > 0.05 and percent2 > 0.05
+    sameScene = sameScene or (
+        len(goodMatches) > 100 and percent1 > 0.02 and percent2 > 0.02)
     if sameScene:
         print("Probably the same scene\n")
     else:
@@ -121,6 +125,7 @@ def getFundamentalMatrix(splitKeypoints1, splitKeypoints2, goodMatches):
         img1, keypoints1, img2, keypoints2, filteredMatches, None)
     cv2.imshow('Passed fundamental inlier test', outImage)
     cv2.waitKey(0)
+    cv2.destroyAllWindows()
     return fundamentalMatrix, homogeneous1, homogeneous2, filteredMatches, numInliers, percentInliers
 
 
@@ -149,7 +154,8 @@ def drawEpipolarLines(img, epipolarLines, keypoints):
 
 
 def FundamentalInliers(numInliers, percentageInliers):
-    sameScene = numInliers > 25 and percentageInliers > .8
+    sameScene = numInliers > 25 and percentageInliers > .6
+    sameScene = sameScene or (numInliers > 75 and percentageInliers > .3)
     if sameScene:
         print("almost definitely the same scene\n")
     else:
@@ -181,12 +187,14 @@ def getHomography(matches, keypoints1, keypoints2):
         img1, keypoints1, img2, keypoints2, filteredMatches, None)
     cv2.imshow('Passed homagraphy inlier test', outImage)
     cv2.waitKey(0)
+    cv2.destroyAllWindows()
 
     return homography, filteredMatches, numInliers, percentInliers
 
 
 def homographyInliers(numInliers, percentageInliers):
-    sameScene = numInliers > 100 and percentageInliers > .5
+    sameScene = numInliers > 12 and percentageInliers > .5
+    sameScene = sameScene or (numInliers > 40 and percentageInliers > .15)
     if sameScene:
         print("there are more than 200 inliers and the percent of outliers that carried over between steps is greater than 50. \ncalculating mosaic..\n")
     else:
@@ -195,15 +203,26 @@ def homographyInliers(numInliers, percentageInliers):
 
 
 def createMosaic(img1, img2, homography):
-    result = cv2.warpPerspective(
-        img1, homography, (img2.shape[1], img2.shape[0]))
+    horizontalBuffer = img2.shape[0] // 2
+    verticalBuffer = img2.shape[1] // 2
+    img2_large_canvas = cv2.copyMakeBorder(
+        img2, horizontalBuffer, horizontalBuffer, verticalBuffer, verticalBuffer, cv2.BORDER_CONSTANT, value=255)
 
-    # Blending the warped image with the second image using alpha blending
-    alpha = 0.5  # blending factor
-    blended_image = cv2.addWeighted(result, alpha, img2, 1 - alpha, 0)
+    translation = np.array([[1, 0, verticalBuffer],
+                            [0, 1, horizontalBuffer],
+                            [0, 0, 1]])
 
-    # Display the blended image
-    cv2.imshow('Blended Image', blended_image)
+    homography_corrected = np.dot(translation, homography)
+
+    warpedImg1 = cv2.warpPerspective(
+        img1, homography_corrected, (img2_large_canvas.shape[1], img2_large_canvas.shape[0]))
+
+    alpha = .5
+    mosaic = cv2.addWeighted(
+        warpedImg1, alpha, img2_large_canvas, 1 - alpha, 0)
+
+    # Display
+    cv2.imshow('Mosaic Image', mosaic)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
@@ -217,9 +236,9 @@ if __name__ == "__main__":
     outDir = sys.argv[2]
     images = getImages(inDir)
     print("Num images:", len(images))
-
-    for img1 in images:
-        for img2 in images:
+    stats = np.full((len(images), len(images), 3), [-1, -1, -1])
+    for i, img1 in enumerate(images):
+        for j, img2 in enumerate(images):
             if (img1 == img2).all():
                 continue
             keypoints1, descriptors1 = extractKeyPoints(img1)
@@ -248,8 +267,8 @@ if __name__ == "__main__":
                 goodMatches, keypoints1, keypoints2)
 
             attemptMosaic = homographyInliers(numInliers, percentInliers)
+            stats[i][j] = [numInliers, percentInliers, attemptMosaic]
             if not attemptMosaic:
                 continue
             createMosaic(img1, img2, homography)
-
-            exit()
+    print(stats)
