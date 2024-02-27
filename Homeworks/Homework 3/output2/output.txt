@@ -1,0 +1,3 @@
+Image Pair                                  | Original Matches | Num Inliers | Percent Inliers | Attempt Mosaic
+---------------------------------------------------------------------------------------------------------------
+Rome-The-Coloseum1-SH.. & colosseum_outside | 432              | 193         | 44              | 1             

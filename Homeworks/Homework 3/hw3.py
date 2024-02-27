@@ -2,6 +2,7 @@ import sys
 import cv2
 import numpy as np
 import os
+import matplotlib.pyplot as plt
 
 
 def getImages(inDir):
@@ -15,11 +16,11 @@ def getImages(inDir):
     print("Getting images")
     images = []
     directory = os.path.join('.', inDir)
-
+    names = []
     for file in os.listdir(directory):
         print(file)
         if file.lower().endswith(".jpg"):
-            print("ends with jpg")
+            names.append(os.path.splitext(file)[0])
             filePath = os.path.join(directory, file)
             img = cv2.imread(filePath, cv2.IMREAD_GRAYSCALE)
             if img is not None:
@@ -27,7 +28,7 @@ def getImages(inDir):
                 images.append(img)
             else:
                 print("Failed to read:", file)
-    return images
+    return images, names
 
 
 def extractKeyPoints(img):
@@ -193,13 +194,15 @@ def getHomography(matches, keypoints1, keypoints2):
 
 
 def homographyInliers(numInliers, percentageInliers):
-    sameScene = numInliers > 12 and percentageInliers > .5
-    sameScene = sameScene or (numInliers > 40 and percentageInliers > .15)
-    if sameScene:
-        print("there are more than 200 inliers and the percent of outliers that carried over between steps is greater than 50. \ncalculating mosaic..\n")
+    if numInliers > 12 and percentageInliers > .5:
+        print("there are more than 12 inliers and the percent of outliers that carried over between steps is greater than 50. \ncalculating mosaic..\n")
+        return True
+    elif numInliers > 40 and percentageInliers > .15:
+        print("there are more than 40 inliers and the percent of outliers that carried over between steps is greater than 15. \ncalculating mosaic..\n")
+        return True
     else:
         print("not close enough to calculate mosaic\n")
-    return sameScene
+        return False
 
 
 def createMosaic(img1, img2, homography):
@@ -227,6 +230,49 @@ def createMosaic(img1, img2, homography):
     cv2.destroyAllWindows()
 
 
+def printStats(stats, images):
+    os.makedirs(outDir, exist_ok=True)
+
+    # Path to the output file
+    outputFile = os.path.join(outDir, 'output.txt')
+
+    # Open the output file for writing
+    with open(outputFile, 'w') as file:
+        # Determine the maximum width for each column based on data and header length
+        max_image_pair_len = max(len(f"{images[i]} & {images[j]}") for i in range(
+            len(images)) for j in range(len(images)) if i != j)
+        data_max_lengths = [max(len(str(stats[i][j][k])) for i in range(
+            len(stats)) for j in range(len(stats[i])) for k in range(4)) for _ in range(4)]
+
+        # Define column headers
+        headers = ["Image Pair", "Original Matches",
+                   "Num Inliers", "Percent Inliers", "Attempt Mosaic"]
+
+        # Ensure max_lengths accounts for the length of the headers too
+        max_lengths = [max(len(headers[0]), max_image_pair_len)] + \
+            [max(len(headers[i + 1]), data_max_lengths[i]) for i in range(4)]
+
+        # Adjust header widths based on the maximum lengths
+        header_line = ' | '.join(headers[i].ljust(
+            max_lengths[i]) for i in range(len(headers)))
+
+        # Print header
+        file.write(header_line + "\n")
+        file.write('-' * len(header_line))
+        file.write("\n")
+
+        # Print table rows
+        for i in range(len(stats)):
+            for j in range(len(stats[i])):
+                if j <= i:  # Optional: to avoid pairing the same image
+                    continue
+                row_data = [f"{images[i]} & {images[j]}"] + \
+                    [str(item) for item in stats[i][j]]
+                row_line = ' | '.join(row_data[k].ljust(
+                    max_lengths[k]) for k in range(len(row_data))) + "\n"
+                file.write(row_line)
+
+
 if __name__ == "__main__":
 
     # total arguments
@@ -234,17 +280,26 @@ if __name__ == "__main__":
         print("Wrong number of args\n")
     inDir = sys.argv[1]
     outDir = sys.argv[2]
-    images = getImages(inDir)
+    images, imageNames = getImages(inDir)
     print("Num images:", len(images))
-    stats = np.full((len(images), len(images), 3), [-1, -1, -1])
+    stats = np.full((len(images), len(images), 4), [-1, -1, -1, -1])
     for i, img1 in enumerate(images):
         for j, img2 in enumerate(images):
             if (j <= i):
                 continue
+            # stat tracking variables
+            originalMatches = 0
+            numInliers = -1
+            percentInliers = -1
+            attemptMosaic = -1
+            stats[i][j] = np.asarray([originalMatches, numInliers,
+                                      percentInliers, attemptMosaic])
             keypoints1, descriptors1 = extractKeyPoints(img1)
             keypoints2, descriptors2 = extractKeyPoints(img2)
             goodMatches, sameScene = matchKeyPoints(img1, keypoints1, descriptors1,
                                                     img2, keypoints2, descriptors2)
+            originalMatches = len(goodMatches)
+            stats[i][j][0] = originalMatches
             if not sameScene:
                 continue
 
@@ -266,9 +321,13 @@ if __name__ == "__main__":
             homography, homographyMatches, numInliers, percentInliers = getHomography(
                 goodMatches, keypoints1, keypoints2)
 
+            stats[i][j][1] = numInliers
+            stats[i][j][2] = percentInliers * 100
+
             attemptMosaic = homographyInliers(numInliers, percentInliers)
-            stats[i][j] = [numInliers, percentInliers, attemptMosaic]
+            stats[i][j][3] = int(attemptMosaic)
+
             if not attemptMosaic:
                 continue
             createMosaic(img1, img2, homography)
-    print(stats)
+    printStats(stats, imageNames)

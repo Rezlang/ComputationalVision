@@ -1,0 +1,12 @@
+Image Pair        | Original Matches | Num Inliers | Percent Inliers | Attempt Mosaic
+-------------------------------------------------------------------------------------
+IMG2536 & IMG2537 | 227              | 158         | 69              | 1             
+IMG2536 & IMG2538 | 133              | 55          | 41              | 1             
+IMG2536 & image2  | 40               | -1          | -1              | -1            
+IMG2536 & image3  | 46               | -1          | -1              | -1            
+IMG2537 & IMG2538 | 101              | 47          | 46              | 1             
+IMG2537 & image2  | 28               | -1          | -1              | -1            
+IMG2537 & image3  | 37               | -1          | -1              | -1            
+IMG2538 & image2  | 10               | -1          | -1              | -1            
+IMG2538 & image3  | 29               | -1          | -1              | -1            
+image2 & image3   | 1136             | 757         | 66              | 1             
